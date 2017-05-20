@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<script src="scripts/jquery-1.7.2.js"></script>
+    <script src="scripts/jquery-ui-1.9.2-min.js"></script>
+    <script src="scripts/jquery.jsPlumb-1.4.0-all.js"></script>
+	<title>流程图</title>
+</head>
+<style>
+  ul,li{
+  	margin: 0;
+  	padding:0;
+  	list-style: none;
+  }
+  .main{
+  	width: 1200px;
+  	height: 500px;
+  	border: 1px solid #ccc;
+  	margin: 0 auto;
+  }
+  .left{
+  	width: 200px;
+  	height: 500px;
+  	border-right:1px solid #ccc;
+  	float: left;
+  	user-select: none;
+  }
+  .node{
+  	width: 100px;
+  	height: 40px;
+  	margin: 50px auto;
+  	border-radius: 10px;
+  	border: 1px solid #eee;
+  	text-align: center;
+  	line-height: 40px;
+  	cursor: pointer;
+  	background: pink;
+  	font-size: 16px;
+  }
+  .middle{
+  	width: 900px;
+  	height: 500px;
+  	border-right:1px solid #ccc;
+  	float: left;
+  	position: relative;
+  	text-align: center;
+  	font-size: 30px;
+  }
+  .middle .node{
+  	/*margin: 5;*/
+  }
+  .right{
+  	width: 98px;
+  	height: 500px;
+  	float: left;
+  }
+  button{
+  	width: 100%;
+  }
+    span{
+  	width: 16px;
+  	height: 16px;
+  	position: absolute;
+  	right: -8px;
+  	top: -8px;
+  }
+  span:after{
+  	content: "";
+  	display:block;
+  	width: 2px;
+  	height: 16px;
+  	background: red;
+  	position: absolute;
+  	right: 7px;
+  	top:0;
+  	transform: rotate(135deg);
+  }
+    span:before{
+  	content: "";
+  	display:block;
+  	width: 2px;
+  	height: 16px;
+  	background: red;
+  	position: absolute;
+  	right: 7px;
+  	top:0;
+  	transform: rotate(45deg);
+  }
+  .connectInfo{
+    font-size: 12px;
+    color: #666;
+    cursor: pointer;
+    border: 1px dashed #ccc;
+    background: rgba(255,255,255,0.5);
+    user-select:none;
+</style>
+<body>
+	<div class="main">
+        <div class="left" id="left">
+            <div class="start node" id="start">开始</div>
+            <div class="flow node" id="flow">流程</div>
+            <div class="judge node" id="judge">判断</div>
+            <div class="over node" id="over">结束</div>
+        </div>
+        <div class="middle" id="middle">
+             流程图
+             <hr>
+        </div>
+        <div class="right">
+           <button id="save">保存</button>
+           <button id="reappear">重新渲染</button>
+        </div>
+	</div>
+</body>
+<script>
+
+ jsPlumb.ready(function(){
+
+            //基本连接线样式
+            var connectorPaintStyle = {
+                lineWidth: 4,
+                strokeStyle: "#61B7CF",
+                joinstyle: "round",
+                outlineColor: "white",
+                outlineWidth: 2
+            };
+            // 鼠标悬浮在连接线上的样式
+            var connectorHoverStyle = {
+                lineWidth: 4,
+                strokeStyle: "#216477",
+                outlineWidth: 2,
+                outlineColor: "white"
+            };
+var hollowCircle = {
+                endpoint: ["Dot", { radius: 8 }],  //端点的形状
+                connectorStyle: connectorPaintStyle,//连接线的颜色，大小样式
+                connectorHoverStyle: connectorHoverStyle,
+                paintStyle: {
+                    strokeStyle: "#1e8151",
+                    fillStyle: "transparent",
+                    radius: 2,
+                    lineWidth: 2
+                },        //端点的颜色样式
+                //anchor: "AutoDefault",
+                isSource: true,    //是否可以拖动（作为连线起点）
+                connector: ["Flowchart", { stub: [40, 60], gap: 10, cornerRadius: 5, alwaysRespectStubs: true }],  //连接线的样式种类有[Bezier],[Flowchart],[StateMachine ],[Straight ]
+                isTarget: true,    //是否可以放置（连线终点）
+                maxConnections: -1,    // 设置连接点最多可以连接几条线
+                connectorOverlays: [
+                   ["Arrow", { width: 20, length: 20, location: 1 ,foldback:1,fillStyle:"#000"}],
+                   ["Label", { cssClass:"connectInfo",
+                            //显示的label
+                             label : "连接信息", 
+                            //连接器的位置
+                            location:0.5,
+                            id:"label",
+                            //点击事件
+                            events:{
+                             "dblclick":function(label, evt) {
+                               var oldLabel = label.canvas.textContent;
+                               var newLabel = prompt("请输入修改",oldLabel);
+                               console.log(label);
+                               label.setLabel(newLabel);
+                              // alert("clicked on label for connection " + label.component.id);
+                             }
+                            }
+                           }]
+                ]
+            };
+
+
+     var obj={connects:[],blocks:[]};
+     var svgs=[];
+
+	   $(".left").children().draggable({
+	    	helper :"clone"
+	        });
+	    var i=0;
+	    $(".middle").droppable({
+	    	greedy:true,
+	    	drop:function(e,ui){
+          // console.log($(ui.draggable[0]).parent()[0].id);
+          jsPlumb.repaintEverything();
+          var parentId = $(ui.draggable[0]).parent()[0].id;
+          var Id=ui.draggable[0].id;
+          // console.log(Id)
+          if(parentId == "left"){
+            jsPlumb.repaintEverything();
+          	   i++;
+          	  var left = parseInt(ui.offset.left - $(this).offset().left);
+	    	  var top = parseInt(ui.offset.top - $(this).offset().top);
+	          var text = ui.draggable.context.innerText;
+	          var id = ui.draggable[0].id+i;
+	          
+	          $(".middle").append($("<div class='node' id="+id+" style='position:absolute;left:"+left+"px;top:"+top+"px'>"+text+"</div>"));
+	          // console.log(id)
+	          // 给拖进去的元素四周加上圆点
+            jsPlumb.addEndpoint(id, { anchors: "TopCenter" }, hollowCircle);
+          	jsPlumb.addEndpoint(id, { anchors: "RightMiddle" }, hollowCircle);
+          	jsPlumb.addEndpoint(id, { anchors: "BottomCenter" }, hollowCircle);
+          	jsPlumb.addEndpoint(id, { anchors: "LeftMiddle" }, hollowCircle);
+            save();
+// 原生js给middle子元素添加双击事件
+         // var nodes=document.getElementById("middle").getElementsByClassName("node");
+            // for(var j=0;j<nodes.length;j++){
+            // 	nodes[j].index=j;
+            // 	nodes[j].ondblclick=function(){
+            // 		var oldText=$(nodes[this.index]).text();
+            // 		var newText=prompt("请输入要修改的内容",oldText);
+            // 		if(newText==null){
+            // 			newText=oldText;
+            // 		}
+            // 		$(nodes[this.index]).text(newText)
+            // 	}
+            // }
+// jquery给Middle子元素添加双击事件
+              //  $("#middle").children(".node").unbind("dblclick");
+              // $("#middle").children(".node").each(function(i,ele){
+              //    $(this).dblclick(function(){
+              //       var oldText=$(this).text();
+              //       var newText=prompt("请输入要修改的内容",oldText);
+              //       if(newText==null){
+              //         newText=oldText;
+              //        }
+              //        $(this).text(newText)
+              //       })
+              // });
+// 比较简单的方法添加双击事件 
+               $("#"+id).dblclick(function(){
+                    var oldText=$(this).text();
+                    var newText=prompt("请输入要修改的内容",oldText);
+                    if(newText==null){
+                      newText=oldText;
+                     }
+                     $(this).text(newText)
+               })
+          }else{
+            jsPlumb.repaintEverything();
+          	
+          };
+    	  
+           
+          // 限制拖拽的范围
+            Limit()
+      
+          // 鼠标进入出现删除
+          Mouse()
+          
+    	}
+    });
+//添加四个小点的函数
+          function Dott(){
+            $(".middle").children(".node").each(function(i,value){
+               var id=value.id;
+                jsPlumb.addEndpoint(id, { anchors: "TopCenter" }, hollowCircle);
+                jsPlumb.addEndpoint(id, { anchors: "RightMiddle" }, hollowCircle);
+                jsPlumb.addEndpoint(id, { anchors: "BottomCenter" }, hollowCircle);
+                jsPlumb.addEndpoint(id, { anchors: "LeftMiddle" }, hollowCircle);
+              })
+          } 
+// 限制拖拽范围函数
+          function Limit(){
+              $(".middle").children(".node").draggable({ 
+                containment: ".middle",//限制拖拽的范围
+                start:function(){
+                  jsPlumb.repaintEverything();
+                  // $("._jsPlumb_connector ").each(function(i,value){
+                  //   value.style.left=svgs[i].left;
+                  //   value.style.top=svgs[i].top;
+                  //   console.log("执行到这了")
+                  // })
+                },
+                drag:function(){
+                  jsPlumb.repaintEverything();//让小点跟着
+                  // $("._jsPlumb_connector ").each(function(i,value){
+                  //   value.style.left=svgs[i].left;
+                  //   value.style.top=svgs[i].top;
+                  //   console.log("执行到这了")
+                  // })
+                },
+                stop:function(){
+                  jsPlumb.repaintEverything();
+                  save();
+                }
+
+             });
+          }
+ // 鼠标进入出现删除按钮函数
+          function Mouse(){
+          $(".middle").children(".node").each(function(){
+              $(this).mouseenter(function(){
+            $(this).append("<span></span>");
+            $(this).on("click","span",function(){
+              
+                jsPlumb.removeAllEndpoints($(this).parent().attr("id"));
+                $(this).parent().remove();
+              
+            })
+            $(this).mouseleave(function(){
+              $(this).children("span").remove()
+            })
+          })
+          })
+        }
+ // 保存函数
+      function save() {
+            var connects = [];
+            var blocks = [];
+            var data=jsPlumb.getAllConnections().jsPlumb_DefaultScope;
+            if(data!=undefined){           
+            $.each(data, function (idx, connection) { 
+                  connects.push({
+                      ConnectionId: connection.id,
+                      PageSourceId: connection.sourceId,
+                      PageTargetId: connection.targetId,
+                      SourceText: connection.source[0].innerText,
+                      TargetText: connection.target[0].innerText
+                  });
+            });
+
+           }
+            $("#middle .node").each(function (idx, elem) {
+                var $elem = $(elem);
+                blocks.push({
+                    BlockId: $elem.attr("id"),
+                    BlockContent: $elem.html(),
+                    BlockX: parseInt($elem.css("left"), 10),
+                    BlockY: parseInt($elem.css("top"), 10)
+                });
+            });
+      
+            // var serliza = JSON.stringify(connects) + "&" + JSON.stringify(blocks);
+            // console.log(eval("("+JSON.stringify(connects)+")"))
+            console.log(connects);
+            console.log(blocks);
+            obj={connects:connects,blocks:blocks}
+            
+            // $.ajax({
+            //     type: "post",
+            //     url: "ajax.aspx",
+            //     data: { id: serliza },
+            //     success: function (filePath) {
+            //         window.open("show-flowChart.aspx?path=" + filePath);
+            //     }
+            // });   
+        };
+ // 重新渲染函数
+          function reAppear(connects,blocks){ 
+            var connects=obj.connects;
+            var blocks=obj.blocks;
+            console.log(connects);
+            console.log(blocks);
+            if(blocks.length!=0){
+              $(blocks).each(function(i,value){
+                  var id=value.BlockId;
+                  var left=value.BlockX;
+                  var top=value.BlockY;
+                  var text=value.BlockContent;
+                  $(".middle").append($("<div class='node' id="+id+" style='position:absolute;left:"+left+"px;top:"+top+"px'>"+text+"</div>"));
+              })
+            }
+            if(connects.length!=0){
+                $(connects).each(function(i,value){
+                  var source=value.PageSourceId;
+                  var target=value.PageTargetId;
+                   jsPlumb.connect({
+                      source:source,
+                      target:target,
+                      endpoint: ["Dot", { radius: 8 }],
+                      EndpointStyle:{ 
+                        strokeStyle: "#1e8151",
+                        fillStyle: "transparent",
+                        radius: 2,
+                        lineWidth: 2
+                      },
+                      // 连接线的样式
+                      paintStyle: {
+                          strokeStyle: "#61B7CF",
+                          fillStyle: "transparent",
+                          radius: 2,
+                          lineWidth: 4
+                      }, 
+                      connector: ["Flowchart", { stub: [40, 60], gap: 10, cornerRadius: 5, alwaysRespectStubs: true }], 
+                      overlays : [
+                       ["Arrow", { width: 20, length: 20, location: 1 ,foldback:1}],
+                         //连接器上配置的label 
+                         ["Label", {                     
+                          cssClass:"connectInfo",
+                          //显示的label
+                          label : "连接信息", 
+                          //连接器的位置
+                          location:0.5,
+                          id:"label",
+                          //点击事件
+                          events:{
+                           "dblclick":function(label, evt) {
+                             var oldLabel = label.canvas.textContent;
+                             var newLabel = prompt("请输入修改",oldLabel);
+                             console.log(label);
+                             label.setLabel(newLabel);
+                            // alert("clicked on label for connection " + label.component.id);
+                           }
+                          }
+                         }]
+                      ]
+                    })
+
+                })
+                console.log($("._jsPlumb_connector "));
+            
+                // $("._jsPlumb_connector ").each(function(i,value){
+                //     svgs.push({
+                //       left:value.style.left,
+                //       top:value.style.top
+                //     })
+                // });
+                console.log(svgs);
+
+            }
+            
+        }
+ // 点击保存
+        $("#save").click(function(){
+           save()
+          // jsPlumb.repaintEverything();
+           
+              $("#middle").children("div").remove();
+              $("#middle").children("svg").remove();
+              $("#reappear").click(function(){
+              $("#middle").children("div").remove();
+              $("#middle").children("svg").remove();
+              reAppear();
+              // Limit();
+              $("._jsPlumb_endpoint").remove();
+              // jsPlumb.repaintEverything();
+              Dott();
+             
+            })
+        })
+
+// 连接事件
+       // jsPlumb.bind("jsPlumbConnection", function(conn, originalEvent) {
+     
+        
+       //  if (conn.connection.sourceId == conn.connection.targetId) {
+       //    jsPlumb.detach(conn);
+       //    alert("不能连接自己！");
+       //  }
+        // $.each(jsPlumb.getEndpoints(conn.source), function(i, el) {
+        
+        //   if (conn.connection != el.connections[0] &&
+        //     (el.connections[0].targetId == conn.targetId || (el.connections[0].sourceId == conn.targetId && el.connections[0].targetId == conn.sourceId))) {
+        //     jsPlumb.detach(conn);
+        //     alert("不能重复连接！");
+        //     return false;
+        //   }
+        // });
+
+        // nodeFlow.onConnectionChange && nodeFlow.onConnectionChange(conn);
+        // conn.connection.bind("editCompleted", function(o) {
+        //   if (typeof console != "undefined")
+        //     console.log("connection edited. path is now ", o.path);
+        // });
+      // });
+      jsPlumb.bind("jsPlumbConnection", function(conn, originalEvent) {
+           save();
+      })
+
+
+
+
+ })
+
+
+
+
+
+
+
+</script>
+</html>
